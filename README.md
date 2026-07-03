@@ -51,43 +51,44 @@ docker compose up -d --build
 
 ## 3. Kubernetes 部署規劃 (Kubernetes Deployment)
 
-專案的 Kubernetes 部署設定檔位於 [k8s/](file:///home/ivan/k8s-ops/app/roman-numerals/k8s/) 目錄下，包含 `Deployment`、`Service` 以及 Gateway API 資源。
+> [!IMPORTANT]
+> **備註 (Note)**：本專案與其部署檔案僅作為 **Kubernetes 實驗室 (K8s Lab) 測試與學習** 使用，非生產環境 (Production) 設計。
 
-### 事前準備 (安裝 Gateway API CRDs)
-如果您的 Kubernetes 叢集尚未安裝 Gateway API CRDs，請先執行以下指令安裝（此處以 standard channel v1.1.0 為例）：
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
-```
+專案的 Kubernetes 部署設定檔位於 [k8s-config/](file:///home/ivan/k8s-ops/app/roman-numerals/k8s-config/) 目錄下，包含 `Deployment` 與 `Service` 資源。
+
+### MetalLB 運作說明與事前準備
+在雲端環境（如 AWS, GCP），`type: LoadBalancer` 的 Service 會自動觸發雲端廠商的負載均衡器並取得 External IP。
+但在地端、自建或裸機的 **K8s Lab 測試環境** 中，預設沒有內建的 LoadBalancer 實作。因此，本專案依賴 **MetalLB** 來實現 LoadBalancer 功能：
+1. 請確保您的 K8s 叢集已安裝並設定好 **MetalLB**（包含 IPAddressPool 與 L2Advertisement）。
+2. 當部署本專案的 Service 後，MetalLB 會自動從設定好的 IP 池中分配一個 External IP 給 `roman-arabic-converter` 服務。
 
 ### 部署指令
 ```bash
-# 套用所有 Kubernetes 資源定義檔 (包括 deployment, service, gateway 與 httproute)
-kubectl apply -f k8s/
+# 套用所有 Kubernetes 資源定義檔 (包括 deployment 與 service)
+kubectl apply -f k8s-config/
 ```
 
 ### 資源說明與技術設計
-1. **Deployment** ([deployment.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s/deployment.yaml))：
+1. **Deployment** ([deployment.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s-config/deployment.yaml))：
    - 設定為 **1 個副本 (Replica)**。
-   - `restartPolicy` 設定為 `Always`，配合 Deployment 控制器，可確保容器在節點故障或維護時，自動於其他可用節點上重建移轉（Rescheduling），並在異常終止時自動重啟。
-   - 配置了資源 Limit 與 Request (CPU/Memory)，並設定 `livenessProbe` 與 `readinessProbe`。
-2. **Service** ([service.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s/service.yaml))：
-   - 採用 **`ClusterIP`** 型態，不對外直接暴露，僅供 Gateway 進行內部轉發。
-3. **Gateway** ([gateway.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s/gateway.yaml))：
-   - 定義 HTTP 入口點（Port 80），並指定 `gatewayClassName: nginx`（可依叢集內實際 Gateway Controller 調整）。
-4. **HTTPRoute** ([httproute.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s/httproute.yaml))：
-   - 設定路由規則，將主機名稱 `roman.ivan.lab` 的流量導向本專案的 Service。
+   - `restartPolicy` 設定為 `Always`，配合 Deployment 控制器，可確保容器在異常終止或節點故障時，自動於其他可用節點上重建移轉（Rescheduling）並重啟。
+   - 配置了資源限制 Limit 與 Request (CPU 250m/100m, Memory 256Mi/128Mi)，並設定 `livenessProbe` 與 `readinessProbe` 以確保服務健康狀態。
+2. **Service** ([service.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s-config/service.yaml))：
+   - 採用 **`LoadBalancer`** 型態，藉由 MetalLB 動態分配 External IP，以便從叢集外部直接存取。
 
-### 網路與 DNS 存取設定說明
-若要透過預期的網域名稱 `roman.ivan.lab` 存取此服務，請依照以下步驟進行設定：
-
-1. 部署完畢後，取得 Gateway 服務分配到的 External IP。這取決於您所使用的 Gateway Controller。例如，若使用 Nginx Gateway Fabric，通常可以在對應的 namespace 取得其 LoadBalancer Service 的 IP：
+### 存取設定與驗證步驟
+1. 部署完畢後，確認 Pod 與 Service 是否正常啟動，並取得 MetalLB 分配到的 External IP：
    ```bash
-   # 範例 (依實際 Controller 部署位置與名稱為準)
-   kubectl get svc -n nginx-gateway
+   kubectl get svc roman-arabic-converter
    ```
-2. 在您的 DNS 伺服器（或本機 `/etc/hosts` 檔案）中，新增一筆紀錄將 `roman.ivan.lab` 指向該 Gateway 的 External IP。
-   - 例如，在本機 `/etc/hosts` 中加入：
-     ```text
-     10.8.18.150  roman.ivan.lab
-     ```
-3. 設定完成後，即可直接在瀏覽器輸入 `http://roman.ivan.lab` 存取應用程式。
+   輸出範例：
+   ```text
+   NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP    PORT(S)        AGE
+   roman-arabic-converter   LoadBalancer   10.96.120.45   192.168.1.200  80:32145/TCP   30s
+   ```
+2. 當 `EXTERNAL-IP` 從 `<pending>` 變為具體 IP（例如 `192.168.1.200`）後，即可直接在瀏覽器輸入 `http://<EXTERNAL-IP>` 存取應用程式。
+3. （選用）若想使用網域名稱存取，可在本機 `/etc/hosts` 檔案中新增對應紀錄：
+   ```text
+   192.168.1.200  roman.ivan.lab
+   ```
+   之後便可透過 `http://roman.ivan.lab` 進行存取。
