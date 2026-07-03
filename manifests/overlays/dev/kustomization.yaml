@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+
+namespace: default
+
+# We can also add commonLabels or images to make it easy for ArgoCD or CI/CD to edit
+images:
+- name: zrchen0425/roman-numeral-converter
+  newName: reg.ivan.lab/hclab/roman-numerals-web
+  newTag: "0.2"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ThemeProvider,
   CssBaseline,
@@ -13,12 +13,18 @@ import {
   Button,
   Chip,
   Fade,
-  Tooltip
+  Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
+  useMediaQuery
 } from '@mui/material';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
-import theme from './theme';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
+import { getTheme } from './theme';
 import { arabicToRoman, romanToArabic } from './utils/romanNumeral';
 
 function App() {
@@ -26,6 +32,38 @@ function App() {
   const [arabic, setArabic] = useState('');
   const [romanError, setRomanError] = useState('');
   const [arabicError, setArabicError] = useState('');
+
+  // Theme mode: auto, dark, light
+  const [themeMode, setThemeMode] = useState(() => {
+    return localStorage.getItem('theme-mode') || 'auto';
+  });
+
+  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+  
+  const resolvedMode = useMemo(() => {
+    if (themeMode === 'auto') {
+      return prefersDarkMode ? 'dark' : 'light';
+    }
+    return themeMode;
+  }, [themeMode, prefersDarkMode]);
+
+  const theme = useMemo(() => getTheme(resolvedMode), [resolvedMode]);
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (resolvedMode === 'dark') {
+      root.classList.remove('light');
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    }
+  }, [resolvedMode]);
+
+  const handleThemeChange = (mode) => {
+    setThemeMode(mode);
+    localStorage.setItem('theme-mode', mode);
+  };
 
   // Handle Roman numeral input change (Left -> Right)
   const handleRomanChange = (value) => {
@@ -119,6 +157,64 @@ function App() {
         <div className="glow-bg" />
 
         <Container maxWidth="md" sx={{ zIndex: 1, position: 'relative' }}>
+          {/* Theme Switcher */}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+            <ToggleButtonGroup
+              value={themeMode}
+              exclusive
+              onChange={(e, newMode) => newMode && handleThemeChange(newMode)}
+              aria-label="theme switcher"
+              size="small"
+              sx={{
+                backgroundColor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'var(--chip-border)',
+                borderRadius: '12px',
+                padding: '2px',
+                '& .MuiToggleButtonGroup-grouped': {
+                  border: 0,
+                  borderRadius: '8px !important',
+                  mx: 0.5,
+                  px: 1.5,
+                  py: 0.5,
+                  color: 'text.secondary',
+                  '&.Mui-selected': {
+                    backgroundColor: 'primary.main',
+                    color: 'primary.contrastText',
+                    '&:hover': {
+                      backgroundColor: 'primary.dark',
+                    },
+                  },
+                },
+              }}
+            >
+              <ToggleButton value="light" aria-label="light mode">
+                <Tooltip title="明亮模式">
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <LightModeIcon sx={{ fontSize: 18, mr: 0.5 }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, display: { xs: 'none', sm: 'inline' } }}>Light</Typography>
+                  </Box>
+                </Tooltip>
+              </ToggleButton>
+              <ToggleButton value="dark" aria-label="dark mode">
+                <Tooltip title="深色模式">
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <DarkModeIcon sx={{ fontSize: 18, mr: 0.5 }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, display: { xs: 'none', sm: 'inline' } }}>Dark</Typography>
+                  </Box>
+                </Tooltip>
+              </ToggleButton>
+              <ToggleButton value="auto" aria-label="system mode">
+                <Tooltip title="跟隨系統">
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <SettingsBrightnessIcon sx={{ fontSize: 18, mr: 0.5 }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, display: { xs: 'none', sm: 'inline' } }}>Auto</Typography>
+                  </Box>
+                </Tooltip>
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
           {/* Header section */}
           <Box sx={{ textAlign: 'center', mb: 6 }}>
             <Typography variant="h3" component="h1" gutterBottom sx={{ mb: 2 }}>
@@ -217,7 +313,14 @@ function App() {
                   startIcon={<DeleteOutlineIcon />}
                   onClick={handleClear}
                   disabled={!roman && !arabic}
-                  sx={{ borderColor: 'rgba(255, 255, 255, 0.15)', '&:hover': { borderColor: 'rgba(255, 255, 255, 0.3)' } }}
+                  sx={{ 
+                    borderColor: 'var(--btn-border)', 
+                    color: 'text.primary',
+                    '&:hover': { 
+                      borderColor: 'var(--btn-hover-border)',
+                      backgroundColor: resolvedMode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'
+                    } 
+                  }}
                 >
                   清除欄位
                 </Button>
@@ -240,15 +343,16 @@ function App() {
                   variant="outlined"
                   sx={{
                     borderRadius: '8px',
-                    borderColor: 'rgba(255, 255, 255, 0.12)',
+                    borderColor: 'var(--chip-border)',
                     py: 2,
                     fontSize: '0.875rem',
-                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    backgroundColor: 'var(--chip-bg)',
+                    color: 'text.primary',
                     transition: 'all 0.2s',
                     '&:hover': {
                       backgroundColor: 'primary.main',
                       borderColor: 'primary.main',
-                      color: 'white',
+                      color: 'primary.contrastText',
                       transform: 'translateY(-2px)'
                     }
                   }}
@@ -258,7 +362,7 @@ function App() {
           </Box>
 
           {/* Rules Card / Explanation */}
-          <Card sx={{ mt: 6, backgroundColor: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255, 255, 255, 0.04)' }}>
+          <Card sx={{ mt: 6, backgroundColor: resolvedMode === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(241, 245, 249, 0.8)', border: '1px solid var(--chip-border)' }}>
             <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <HelpOutlineIcon sx={{ mr: 1, color: 'secondary.main' }} />

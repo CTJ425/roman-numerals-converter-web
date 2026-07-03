@@ -1,94 +1,77 @@
 # 羅馬數字 ⇄ 阿拉伯數字轉換器 (Roman ⇄ Arabic Numeral Converter)
 
-本專案是一個基於 React 18 + Material UI (MUI) v5 + Vite 開發的單頁應用程式 (SPA)。提供直覺的高質感深色調 (Dark Mode) 介面，讓使用者可以即時雙向轉換 1 至 3999 之間的羅馬數字與阿拉伯數字，並具備嚴格的格式與邊界值驗證。
+本專案是一個兼具**前端網頁**與 **Kubernetes GitOps 部署**的雙向轉換器專案。
 
 ---
 
-## 1. 本地開發與測試 (Local Development & Testing)
+## 1. 專案目的 (Project Purpose)
 
-本專案已設定好單元測試 (Vitest) 與前端熱重載開發伺服器。
-
-### 安裝相依套件
-```bash
-npm install
-```
-
-### 啟動開發伺服器
-```bash
-npm run dev
-```
-啟動後可在瀏覽器開啟 `http://localhost:5173` 進行即時開發與調試。
-
-### 執行單元測試
-本專案的數值轉換核心演算法位於 [romanNumeral.js](file:///home/ivan/k8s-ops/app/roman-numerals/src/utils/romanNumeral.js)，並在 [romanNumeral.test.js](file:///home/ivan/k8s-ops/app/roman-numerals/src/utils/romanNumeral.test.js) 中撰寫了完整測試案例，涵蓋邊界值、減法規則與各式非法輸入。
-```bash
-npm run test
-```
-
-### 生產環境編譯
-```bash
-npm run build
-```
-編譯完成後，靜態產物將輸出至 `dist/` 目錄。
+提供直覺且高質感的前端介面，讓使用者可以進行 1 至 3999 之間的羅馬數字與阿拉伯數字之雙向即時轉換，並具備嚴格的格式校驗與極致的使用者體驗。本專案同時作為 **Kubernetes 實驗室 (K8s Lab)** 驗證 ArgoCD 與 Kustomize 部署流程的範例專案。
 
 ---
 
-## 2. Docker 容器化測試 (Docker Containerization)
+## 2. 專案目錄結構 (Project Layout)
 
-專案內含 Dockerfile 與 Docker Compose 設定，採多階段建置 (Multi-stage Build) 以縮減映像檔大小，並在生產環境以 Nginx 託管靜態網頁與設定 SPA fallback 路由。
-
-### 一鍵建置與啟動
-```bash
-docker compose up -d --build
+```text
+/home/ivan/hclab/k8s-ops/app/roman-numerals-converter-web/
+├── code/                                # 1. 前端網頁專案原始碼 (React + Vite + Dockerfile)
+│   ├── src/                             # 網頁核心原始碼
+│   ├── Dockerfile                       # 容器化建置設定
+│   ├── package.json                     # 套件相依性設定
+│   └── README.md                        # 本地開發與單元測試說明
+│
+└── manifests/                           # 2. Kubernetes 部署設定 (GitOps)
+    ├── base/                            # 基礎部署資源 (Deployment, Service)
+    └── overlays/                        # 環境覆寫設定 (dev 環境設定)
 ```
-* **存取網址**：開啟瀏覽器前往 `http://localhost:8080` 即可存取。
-* **停止服務**：
-  ```bash
-  docker compose down
-  ```
 
 ---
 
-## 3. Kubernetes 部署規劃 (Kubernetes Deployment)
+## 3. 安裝與執行方式 (Installation & Execution)
 
-> [!IMPORTANT]
-> **備註 (Note)**：本專案與其部署檔案僅作為 **Kubernetes 實驗室 (K8s Lab) 測試與學習** 使用，非生產環境 (Production) 設計。
-
-專案的 Kubernetes 部署設定檔位於 [k8s-config/](file:///home/ivan/k8s-ops/app/roman-numerals/k8s-config/) 目錄下，包含 `Deployment` 與 `Service` 資源。
-
-### MetalLB 運作說明與事前準備
-在雲端環境（如 AWS, GCP），`type: LoadBalancer` 的 Service 會自動觸發雲端廠商的負載均衡器並取得 External IP。
-但在地端、自建或裸機的 **K8s Lab 測試環境** 中，預設沒有內建的 LoadBalancer 實作。因此，本專案依賴 **MetalLB** 來實現 LoadBalancer 功能：
-1. 請確保您的 K8s 叢集已安裝並設定好 **MetalLB**（包含 IPAddressPool 與 L2Advertisement）。
-2. 當部署本專案的 Service 後，MetalLB 會自動從設定好的 IP 池中分配一個 External IP 給 `roman-arabic-converter` 服務。
-
-### 部署指令
-```bash
-# 套用所有 Kubernetes 資源定義檔 (包括 deployment 與 service)
-kubectl apply -f k8s-config/
-```
-
-### 資源說明與技術設計
-1. **Deployment** ([deployment.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s-config/deployment.yaml))：
-   - 設定為 **1 個副本 (Replica)**。
-   - `restartPolicy` 設定為 `Always`，配合 Deployment 控制器，可確保容器在異常終止或節點故障時，自動於其他可用節點上重建移轉（Rescheduling）並重啟。
-   - 配置了資源限制 Limit 與 Request (CPU 250m/100m, Memory 256Mi/128Mi)，並設定 `livenessProbe` 與 `readinessProbe` 以確保服務健康狀態。
-2. **Service** ([service.yaml](file:///home/ivan/k8s-ops/app/roman-numerals/k8s-config/service.yaml))：
-   - 採用 **`LoadBalancer`** 型態，藉由 MetalLB 動態分配 External IP，以便從叢集外部直接存取。
-
-### 存取設定與驗證步驟
-1. 部署完畢後，確認 Pod 與 Service 是否正常啟動，並取得 MetalLB 分配到的 External IP：
+### A. 本地開發與測試 (Local Development)
+如果您需要修改程式碼、啟動開發伺服器或執行測試：
+1. 進入 `code` 資料夾：
    ```bash
-   kubectl get svc roman-arabic-converter
+   cd code
    ```
-   輸出範例：
-   ```text
-   NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP    PORT(S)        AGE
-   roman-arabic-converter   LoadBalancer   10.96.120.45   192.168.1.200  80:32145/TCP   30s
+2. 安裝套件：
+   ```bash
+   npm install
    ```
-2. 當 `EXTERNAL-IP` 從 `<pending>` 變為具體 IP（例如 `192.168.1.200`）後，即可直接在瀏覽器輸入 `http://<EXTERNAL-IP>` 存取應用程式。
-3. （選用）若想使用網域名稱存取，可在本機 `/etc/hosts` 檔案中新增對應紀錄：
-   ```text
-   192.168.1.200  roman.ivan.lab
+3. 啟動熱重載開發伺服器 (`http://localhost:5173`)：
+   ```bash
+   npm run dev
    ```
-   之後便可透過 `http://roman.ivan.lab` 進行存取。
+4. 執行 Vitest 單元測試（數值轉換核心演算法測試）：
+   ```bash
+   npm run test
+   ```
+*詳細的開發指南請參閱 [code/README.md](file:///home/ivan/hclab/k8s-ops/app/roman-numerals-converter-web/code/README.md)。*
+
+---
+
+### B. Docker 容器化測試 (Local Containerization)
+如果您想要在本機以與生產環境相同的 Nginx 託管網頁環境進行測試：
+1. 進入 `code` 資料夾：
+   ```bash
+   cd code
+   ```
+2. 一鍵建置並在背景啟動容器 (`http://localhost:8080`)：
+   ```bash
+   docker compose up -d --build
+   ```
+3. 停止服務：
+   ```bash
+   docker compose down
+   ```
+
+---
+
+### C. Kubernetes 部署 (GitOps via ArgoCD)
+本專案的部署已被完全納入 `k8s-ops` 儲存庫的 ArgoCD 自動化管線中：
+1. **宣告設定檔**：位於 [infrastructure/argocd/applications/roman-numerals-converter-web.yaml](file:///home/ivan/hclab/k8s-ops/infrastructure/argocd/applications/roman-numerals-converter-web.yaml)。
+2. **部署清單**：ArgoCD 會監控並自動套用 [manifests/overlays/dev/](file:///home/ivan/hclab/k8s-ops/app/roman-numerals-converter-web/manifests/overlays/dev/) 的 Kustomize 配置。
+3. **部署步驟**：
+   - 確保已啟動 `root-app`（請參閱儲存庫根目錄的 [README.md](file:///home/ivan/hclab/k8s-ops/README.md)）。
+   - ArgoCD 將自動在預設 namespace 中部署此專案，並透過 **MetalLB** 分配的 LoadBalancer IP 讓您可以從外部瀏覽器直接存取應用程式。

@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: roman-arabic-converter
-  namespace: default
   labels:
     app: roman-arabic-converter
 spec:
